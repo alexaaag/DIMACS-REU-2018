@@ -1,0 +1,277 @@
+---
+title: "Predictive Modeling"
+output: html_notebook
+---
+
+### K-Means Clustering
+```{r,warning=FALSE}
+qualitydf<-read.csv("qualitydf.csv",header = T)
+```
+
+```{r}
+# clustering
+set.seed(4747)
+require(ggplot2)
+quality_cluster<-kmeans(qualitydf[,c(1,2)],2)
+quality_cluster
+```
+
+```{r}
+cluster<-quality_cluster$cluster
+#for(i in 1:length(cluster)){
+#  if(cluster[i]==3){
+#    cluster[i]<-"bad"
+#  }else if (cluster[i]==2){
+#    cluster[i]<-"medium"
+#  }else{
+#    cluster[i]<-"good"
+#  }
+#}
+for(i in 1:length(cluster)){
+  if(cluster[i]==2){
+    cluster[i]<-"bad"
+  }else{
+    cluster[i]<-"good"
+  }
+}
+cluster<-as.factor(cluster)
+bigdf<-cbind(qualitydf,cluster)
+bigdf
+```
+
+```{r}
+ggplot(bigdf,aes(x=texture,y=profile_resid,shape=as.factor(height),color=cluster))+geom_point()+coord_flip()+theme_classic()
+```
+
+
+## Predictive Modeling
+### Data Preprocessing
+```{r}
+# read in the matrices 
+folder <- "~/Documents/School/DIMACS REU/measurements/matrix/"
+file_list <- list.files(path = folder, pattern = "*.csv")
+
+mat_pca<-matrix(0,nrow=length(file_list),ncol=1520*1628)
+namelst<-list()
+for (i in 1:length(file_list)){
+    df<- read.csv(paste(folder, file_list[i],sep=''),header=F,skip=23)
+    df[is.na(df)]<-0
+    #imputedf<-DMwR::knnImputation(df,k=5)
+    name<-substr(file_list[i],start=11,stop=nchar(file_list[i])-17)
+    namelst<-c(namelst,name)
+    if (dim(df)[2]>1628){
+      df<-df[1:1520,1:1628]
+    }
+    if (dim(df)[2]==1520){
+      df<-t(df)
+    }
+    assign(name, df) 
+    mat_pca[i,]<-as.vector(as.matrix(df))
+    
+}
+length(file_list)
+dim(mat_pca)
+```
+
+
+```{r}
+for (i in 1:dim(mat_pca)[1]){
+  mat<-matrix(mat_pca[i,],1520,1628);
+  write.csv(mat,paste("~/Documents/School/DIMACS REU/analysis/matrices/",namelst[i],".csv",sep=''))
+}
+dim(mat)
+```
+
+```{r}
+# load the umpca components
+newfea<-read.csv("~/Documents/School/DIMACS REU/analysis/umpca_reconstruction/newfea.csv",header=FALSE)
+num<-1:10
+names(newfea)<-paste("MPC",num,sep='')
+dim(newfea)
+```
+
+
+```{r,echo=FALSE}
+# run a pca
+dome_pca<-prcomp(mat_pca,center = TRUE)
+pcs<-dome_pca$x
+```
+
+### Decision Tree with PCA
+```{r}
+# create the training data frame
+umpca_df<-data.frame(cbind(newfea[,1:4],bigdf))
+umpca_df <- umpca_df %>%
+  select(-profile_resid,-texture)
+
+# split into train and test by 3:1
+# sample 2 from good, 1 from medium and 1 from bad
+set.seed(47)
+#goodind<-sample(which(classification_df$cluster=="good"),1,replace=FALSE)
+#medind<-sample(which(classification_df$cluster=="medium"),2,replace=FALSE)
+#badind<-sample(which(classification_df$cluster=="bad"),2,replace=FALSE)
+#testind<-c(goodind,medind,badind)
+
+goodind<-sample(which(pca_df$cluster=="good"),3,replace=FALSE)
+badind<-sample(which(pca_df$cluster=="bad"),3,replace=FALSE)
+
+testind<-c(goodind,badind)
+pca_test<-pca_df[testind,]
+pca_train<-pca_df[-testind,]
+
+# run a decision tree on the training set
+require(rpart)
+require(rpart.plot)
+require(caret)
+tree<-rpart(cluster~., data = pca_train, method = "class",minsplit=3)
+printcp(tree)
+rpart.plot(tree)
+
+# predict on the test set
+pred<-predict(tree,pca_test,type="class")
+confusionMatrix(pred,pca_test$cluster)
+```
+
+### Classification with UMPCA
+```{r}
+# create the training data frame
+umpca_df<-data.frame(cbind(newfea[,1:4],bigdf))
+umpca_df <- umpca_df %>%
+  select(-profile_resid,-texture)
+
+umpca_test<-umpca_df[testind,]
+umpca_train<-umpca_df[-testind,]
+
+# run a decision tree on the training set
+require(rpart)
+require(rpart.plot)
+require(caret)
+tree<-rpart(cluster~., data = umpca_train, method = "class",minsplit=3)
+printcp(tree)
+rpart.plot(tree)
+
+# predict on the test set
+pred<-predict(tree,umpca_test,type="class")
+confusionMatrix(pred,umpca_test$cluster)
+```
+
+### Random Forest
+```{r}
+# with pca
+control <- trainControl(method="repeatedcv", number=10, repeats=10,verboseIter = FALSE,sampling = "up")
+seed <- 47
+metric <- "Accuracy"
+set.seed(seed)
+mtry <- 1:5
+tunegrid <- expand.grid(.mtry=mtry)
+rf_default <- train(cluster~., data=pca_train, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
+confusionMatrix(predict(rf_default,pca_test),pca_test$cluster)
+varImp(rf_default)
+rf_default
+```
+
+```{r}
+# with umpca
+control <- trainControl(method="repeatedcv", number=10, repeats=10,verboseIter = FALSE,sampling = "up")
+seed <- 47
+metric <- "Accuracy"
+set.seed(seed)
+mtry <- 1:5
+tunegrid <- expand.grid(.mtry=mtry)
+rf_default <- train(cluster~., data=umpca_train, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
+confusionMatrix(predict(rf_default,umpca_test),umpca_test$cluster)
+varImp(rf_default)
+rf_default
+```
+
+
+```{r,include=FALSE}
+### SVM
+require(caret)
+
+#linear svm
+traincv.linear <- train(cluster ~ ., data=train, method="svmLinear",
+trControl = trainControl(method="cv"),
+tuneGrid= expand.grid(C=c(0.01,0.1,1,5,10)),
+preProcess = c("center", "scale"))
+traincv.linear$finalModel
+
+#radial
+traincv.radial <- train(cluster ~ ., data=train, method="svmRadial",
+trControl = trainControl(method="cv"),
+tuneGrid= expand.grid(C=c(0.01,0.1,1,5,10),sigma=c(1,2,3)),
+preProcess = c("center", "scale"))
+traincv.radial$finalModel
+
+#polynomial
+traincv.poly <- train(cluster ~ ., data=train, method="svmPoly",
+trControl = trainControl(method="cv"),
+tuneGrid= expand.grid(C=c(0.01,0.1,1,5,10),degree=c(1,2,3),scale=TRUE),
+preProcess = c("center", "scale"))
+traincv.poly$finalModel
+
+test
+pred.linear<-predict(traincv.linear,test)
+confusionMatrix(pred.linear,test$cluster)
+pred.poly<-predict(traincv.poly,test)
+confusionMatrix(pred.poly,test$cluster)
+pred.radial<-predict(traincv.radial,test)
+confusionMatrix(pred.radial,test$cluster)
+
+## regression
+df<-bigdf %>%
+  select(-cluster,-texture)
+
+resid_df<-cbind(df,newfea[,1:4])
+reg_train<-resid_df[-testind,]
+reg_test<-resid_df[testind,]
+
+# deviation~.
+dev_ls<-lm(profile_resid~.,data=reg_train)
+summary(dev_ls)
+plot(x=dev_ls$fitted.values,y=dev_ls$residuals,xlab="fitted",ylab="residual")
+abline(h=0,col="red")
+
+## lasso
+require(glmnet)
+# deviation~
+set.seed(47)
+lambda.grid = 10^seq(5, -2, length = 100)
+domes.lasso.cv <- cv.glmnet(as.matrix(reg_train[, 2:8]), reg_train$deviation, alpha = 1,
+lambda = lambda.grid, standardize = TRUE)
+coef.lasso <- coef(domes.lasso.cv, s = "lambda.min")
+
+dev_ls<-lm(deviation~fill+height+speed+PC1+PC2+PC3+PC4,data=reg_train)
+summary(dev_ls)
+plot(x=dev_reg$fitted.values,y=dev_reg$residuals,xlab="fitted",ylab="residual")
+abline(h=0,col="red")
+
+# backward selection
+dev_bck <- step(dev_ls, direction="backward")
+summary(dev_bck)
+
+# prediction on test
+lasso_pred<-predict(domes.lasso.cv,as.matrix(test[,2:9]),s="lambda.min")
+sum((lasso_pred-test$deviation)^2)
+```
+
+```{r,include=FALSE}
+#roughness~.
+df<-qualitydf %>%
+  select(-cluster,-deviation)
+rough_df<-cbind(df,newfea[,1:4])
+train<-rough_df[-testind,]
+test<-rough_df[testind,]
+
+rough_ls<-lm(texture~height+fill+speed+PC1+PC2+PC3+PC4,train)
+summary(rough_ls)
+plot(x=rough_ls$fitted.values,y=rough_ls$residuals,xlab="fitted",ylab="residual")
+abline(h=0,col="red")
+
+rough_bck <- step(rough_ls, direction="backward")
+summary(rough_bck)
+
+## GGPAIRS plot
+require(GGally)
+ggpairs(qualitydf,aes(color=as.factor(height)))
+```

@@ -1,0 +1,66 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r,warning=FALSE,echo=FALSE}
+require(dplyr)
+require(ggplot2)
+require(readr)
+require(dtw)
+```
+
+```{r}
+folder <- "~/Documents/School/DIMACS REU/analysis/umpca_reconstruction/"
+file_list <- list.files(path = folder, pattern = "*.csv")
+
+nsample=length(file_list)
+for (i in 1:length(file_list)){
+    name<-substr(file_list[i],start=1,stop=nchar(file_list[i])-4)
+     assign(name, read.csv(paste(folder, file_list[i], sep=''),header=FALSE))
+}
+```
+
+```{r}
+image(as.matrix(hat_5_1),asp=1,xlab="(a)")
+```
+
+```{r}
+image(as.matrix(hat_2_2),main="MPC1",asp=1)
+```
+
+```{r}
+image(as.matrix(hat_2_3),main="MPC3",asp=1)
+```
+
+```{r}
+image(as.matrix(hat_4_4),main="MPC5",asp=1)
+```
+
+
+```{r}
+image(as.matrix(hat_4_6),main="MPC6")
+```
+
+```{r}
+image(as.matrix(hat_4_7),main="MPC7")
+```
+
+```{r}
+image(as.matrix(hat_4_8),main="MPC8")
+```
+
+```{r}
+image(as.matrix(hat_4_9),main="MPC9")
+```
+
+```{r}
+image(as.matrix(hat_4_10),main="MPC10")
+```
+
+
+
+
+
+
+

@@ -1,0 +1,227 @@
+---
+title: "Developing Quality Metrics"
+output: html_notebook
+---
+
+```{r,warning=FALSE,echo=FALSE}
+require(dplyr)
+require(ggplot2)
+require(readr)
+require(dtw)
+```
+
+This is a r notebook that uses dynamic time warping to align the profile data. Then we used a LOESS regression
+to quantify the error. 
+We chose fill 20 speed 20 as our reference sample. 
+
+## Develop quality metrics
+### Data Preprocessing
+```{r,warning=FALSE}
+# read in the data
+folder <- "measurements/profile/profile2/"
+file_list <- list.files(path = folder, pattern = "*.csv")
+
+nsample=length(file_list)/6
+
+profile_lst<-list()
+for (i in 1:length(file_list)){
+    profile<- read.csv(paste(folder, file_list[i],sep=''))
+    name<-substr(file_list[i],start=1,stop=nchar(file_list[1])-5)
+    assign(name, profile) 
+    profile_lst<-c(profile_lst,profile)
+}
+
+
+#omit the NAs
+for (i in seq(1,length(profile_lst),by=2)){
+  profile_lst[[i]]<-na.omit(cbind(profile_lst[[i]],profile_lst[[i+1]]))[,1]
+  profile_lst[[i+1]]<-na.omit(cbind(profile_lst[[i]],profile_lst[[i+1]]))[,2]
+}
+
+profile_height<-c()
+profile_fill<-c()
+profile_speed<-c()
+seq1<-seq(1,(3-1)*6+1,by=6)
+seq2<-seq(4*6+1,(nsample-1)*6+1,by=6)
+sequence<-c(seq1,seq2)
+#sequence<-c(1:3,5:length(file_list))  # get rid of 20_20
+for (i in sequence){
+  profile_height<-c(profile_height,as.numeric(strsplit(file_list[i],"_")[[1]][2]))
+  profile_fill<-c(profile_fill,as.numeric(strsplit(file_list[i],"_")[[1]][3]))
+  profile_speed<-c(profile_speed,as.numeric(strsplit(file_list[i],"_")[[1]][4]))
+}
+length(profile_lst)
+```
+
+```{r}
+# cleaned some bad data
+# filter the missing data in 100_60
+profile_lst[[2*12+2]]<-profile_lst[[2*12+2]][which(profile_lst[[2*12+1]]>10000)]
+profile_lst[[2*12+1]]<-profile_lst[[2*12+1]][which(profile_lst[[2*12+1]]>10000)]
+```
+
+```{r}
+# before alignment demonstration
+plot(xRef,zRef,col="orange",cex=0.2,xlab="X (um)",ylab="Z (um)",main = "Before Alignment",asp=1)
+points(profile_lst[[4*12+1]],profile_lst[[4*12+2]],cex=0.2,col="blue",asp=1)
+legend("topright", legend=c("reference", "data"),
+       col=c("orange", "blue"), lty=1:2, cex=0.8)
+
+# alignment demonstration
+Z<-profile_lst[[50]]
+alignmentOBE <-
+  dtw(Z,zRef,
+      keep=TRUE,step=asymmetric)
+plot(alignmentOBE,type="three",off=1,main="Matching",asp=0.05)
+```
+
+### Profile Alignment and Quantifying Errors
+Now let's try a loop implementation too return all the alignments of profile 1
+```{r}
+bigdf<-list()
+errordf<-list()
+for (j in seq(1,2*5+1,by=2)){
+  ref1_ind<-3*12+j
+  xRef<-profile_lst[[ref1_ind]] # load xref (profile 20 20 )
+  zRef<-profile_lst[[ref1_ind+1]] #load zref
+  
+  newdf<-list()
+  start_ind<-j
+  end_ind<-(nsample-1)*12+j
+
+  for (i in seq(start_ind,end_ind,by=12)[-4]){
+  X<-profile_lst[[i]]   # load X
+  Z<-profile_lst[[i+1]] # load Z 
+  
+  
+  zShift<-max(zRef)-max(Z)
+  Z<-Z+zShift               # align in the z direction 
+  
+  X<-X[which(Z>0)]
+  Z<-Z[which(Z>0)]   # trim data with height under 0
+  
+  xRef<-xRef[which(zRef>100)]
+  zRef<-zRef[which(zRef>100)]   # trim data with height under 0
+  
+  alignment<-dtw(Z,zRef,k=T) # dtw alignment
+ 
+  # take the highest point of ref and find its matching indices with the compared data
+#  matchdata<-alignment$index1[which(alignment$index2==which(zRef==max(zRef)))] 
+#  matchref<-alignment$index2[which(alignment$index2==which(zRef==max(zRef)))]
+  matchdata<-alignment$index1[which(alignment$index2==as.integer(length(Z)/5))]
+  matchref<-alignment$index2[which(alignment$index2==as.integer(length(Z)/5))]
+  # align in both x and z direction
+  zShift<-zRef[matchref]-Z[matchdata]
+  xShift<-xRef[matchref]-X[matchdata]
+
+  X<-X+xShift
+  Z<-Z+zShift
+  
+  # trim the left tail of X
+  if(max(min(X),min(xRef))==min(xRef)){      # if ref has a shorter left tail, then trim X
+  left_start<-which(X>max(min(X),min(xRef)))
+  X<-X[left_start]
+  Z<-Z[left_start]
+  }
+
+  # trim the right tail of X
+  if(min(max(X),max(xRef))==max(xRef)){n
+  right_start<-which(X<min(max(X),max(xRef)))
+  X<-X[right_start]
+  Z<-Z[right_start]
+  }
+  
+  newdf<-c(newdf,data.frame(X))
+  newdf<-c(newdf,data.frame(Z))
+ }
+
+  # run a loess and store the error
+  ref<-loess(zRef~xRef,span=0.01)
+  error_lst<-c()
+  ind<-(nsample-1)*2-1
+  for (i in seq(1,ind,by=2)){
+   pred<-predict(ref,newdata = newdf[[i]])
+   y<-newdf[[i+1]]
+   rmse<-sqrt(sum((pred-y)^2))
+   error<-rmse/length(y)
+   error_lst<-c(error_lst,error)
+  }
+  bigdf<-c(bigdf,newdf)
+  errordf<-c(errordf,data.frame(error_lst))
+}
+```
+
+
+
+```{r}
+# find the average error of each profile
+meanlst<-c()
+for (i in 1:6){
+  mean_error<-mean(errordf[[i]])
+  meanlst<-c(meanlst,mean_error)
+}
+
+# use the three profiles with min error to create quality metrics
+min_index<-head(order(meanlst),3)
+profile_resid<-c()
+for (i in 1:(nsample-1)){
+  resid<-mean(errordf[[min_index[1]]][i],errordf[[min_index[2]]][i],errordf[[min_index[3]]][i])
+  profile_resid<-c(profile_resid,resid)
+}
+```
+
+```{r}
+# plots that check alignment 
+j<-1 # which profile
+p<-7# which sample
+ndf<-(j-1)/2
+ref1_ind<-3*12+j
+myPlot<-function(index) {points(y=bigdf[[index+1]],x=bigdf[[index]],cex=0.2,col="blue")}
+plot(x=profile_lst[[ref1_ind]],y=profile_lst[[ref1_ind+1]],cex=0.2,col="orange",asp=1,,xlab="X (um)",ylab="Z (um)",main="Aligned Curves")
+lapply(seq(ndf*(nsample-1)*2+p,ndf*(nsample-1)*2+p,by=2),FUN=myPlot)
+legend("topright", legend=c("reference", "data"),
+       col=c("orange", "blue"), lty=1:2, cex=0.8)
+```
+
+
+### Import Roughness 
+```{r,warning=FALSE}
+# read in the rouoghness data
+folder <- "measurements/roughness/roughness3/"
+file_list <- list.files(path = folder, pattern = "*.csv")
+
+roughnessdf<-data.frame()
+for (i in 1:length(file_list)){
+    roughness<- read.csv(paste(folder, file_list[i],sep=''),header=F,skip=7)[-1]
+    name<-substr(file_list[i],start=1,stop=nchar(file_list[1])-5)
+    assign(name, roughness) 
+    roughnessdf<-rbind(roughnessdf,roughness)
+}
+roughnessdf<-roughnessdf[-c(7,8),] # take out the roughness of 20_20 
+names(roughnessdf)<-c("Sa","Sz","Str","Spc","Sdr")
+
+# average out the two area
+texture<-c()
+for(i in seq(1,(nsample-1)*2-1,by=2)){
+  mean<-(roughnessdf$Sdr[i]+roughnessdf$Sdr[i+1])/2
+  texture<-c(texture,mean)
+}
+
+# read height, fill and speed
+height<-c()
+fill<-c()
+speed<-c()
+sequence<-c(1:3,5:length(file_list))  # get rid of 20_20
+for (i in sequence){
+  height<-c(height,as.numeric(strsplit(file_list[i],"_")[[1]][2]))
+  fill<-c(fill,as.numeric(strsplit(file_list[i],"_")[[1]][3]))
+  speed<-c(speed,as.numeric(strsplit(file_list[i],"_")[[1]][4]))
+}
+
+# create quality df
+qualitydf<-cbind.data.frame(texture,profile_resid,height,fill,speed)
+
+# export df
+write.csv(qualitydf,"qualitydf.csv",row.names = FALSE)
+```
+
