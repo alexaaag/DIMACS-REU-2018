@@ -100,11 +100,6 @@ umpca_df <- umpca_df %>%
 # split into train and test by 3:1
 # sample 2 from good, 1 from medium and 1 from bad
 set.seed(47)
-#goodind<-sample(which(classification_df$cluster=="good"),1,replace=FALSE)
-#medind<-sample(which(classification_df$cluster=="medium"),2,replace=FALSE)
-#badind<-sample(which(classification_df$cluster=="bad"),2,replace=FALSE)
-#testind<-c(goodind,medind,badind)
-
 goodind<-sample(which(pca_df$cluster=="good"),3,replace=FALSE)
 badind<-sample(which(pca_df$cluster=="bad"),3,replace=FALSE)
 
