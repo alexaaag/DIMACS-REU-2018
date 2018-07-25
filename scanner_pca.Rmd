@@ -41,7 +41,7 @@ scannerdf[is.na(scannerdf)]<-0
 ```{r}
 scanner_mat<-as.matrix(scannerdf)
 scanner_pca<-prcomp(scanner_mat,center=TRUE)
-scanner_pca
+write.csv(scanner_pca$x[,1:4],"scanner_pca.csv")
 ```
 
 

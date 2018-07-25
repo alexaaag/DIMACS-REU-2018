@@ -13,7 +13,6 @@ qualitydf<-read.csv("qualitydf.csv",header = T)
 set.seed(4747)
 require(ggplot2)
 quality_cluster<-kmeans(qualitydf[,c(1,2)],2)
-quality_cluster
 ```
 
 ```{r}
@@ -28,20 +27,17 @@ for(i in 1:length(cluster)){
 }
 cluster<-as.factor(cluster)
 bigdf<-cbind(qualitydf,cluster)
-bigdf
-```
 
-```{r}
 # plot the clustering result
 ggplot(bigdf,aes(x=texture,y=profile_resid,shape=as.factor(height),color=cluster))+geom_point()+coord_flip()+theme_classic()
 ```
 
-
 ## Predictive Modeling
 ### Data Preprocessing
+
 ```{r}
-# read in the matrices 
-folder <- "~/Documents/School/DIMACS REU/measurements/matrix/"
+# read in the VR measurement matrices 
+folder <- "measurements/matrix/"
 file_list <- list.files(path = folder, pattern = "*.csv")
 
 mat_pca<-matrix(0,nrow=length(file_list),ncol=1520*1628)
@@ -68,16 +64,16 @@ dim(mat_pca)
 
 
 ```{r}
+# write the matrices for matlab code of umpca
 for (i in 1:dim(mat_pca)[1]){
   mat<-matrix(mat_pca[i,],1520,1628);
-  write.csv(mat,paste("~/Documents/School/DIMACS REU/analysis/matrices/",namelst[i],".csv",sep=''))
+  write.csv(mat,paste("umpca_reconstruction/",namelst[i],".csv",sep=''))
 }
-dim(mat)
 ```
 
 ```{r}
 # load the umpca components
-newfea<-read.csv("~/Documents/School/DIMACS REU/analysis/umpca_reconstruction/newfea.csv",header=FALSE)
+newfea<-read.csv("umpca_reconstruction/newfea.csv",header=FALSE)
 num<-1:10
 names(newfea)<-paste("MPC",num,sep='')
 dim(newfea)
@@ -87,21 +83,25 @@ dim(newfea)
 ```{r,echo=FALSE}
 # run a pca
 dome_pca<-prcomp(mat_pca,center = TRUE)
-pcs<-dome_pca$x
+dome_pca$x[,1:4]
+# read the scanner pca
+scanner_pca<-read.csv("scanner_pca.csv")[,-1]
+colnames(scanner_pca)<-c("spc1","spc2","spc3","spc4")
 ```
 
 ### Decision Tree with PCA
 ```{r}
+require(dplyr)
 # create the training data frame
-umpca_df<-data.frame(cbind(newfea[,1:4],bigdf))
-umpca_df <- umpca_df %>%
+pca_df<-data.frame(cbind(dome_pca$x[,1:4],scanner_pca[,1:4],bigdf))
+pca_df <- pca_df %>%
   select(-profile_resid,-texture)
 
 # split into train and test by 3:1
 # sample 2 from good, 1 from medium and 1 from bad
 set.seed(47)
-goodind<-sample(which(pca_df$cluster=="good"),3,replace=FALSE)
-badind<-sample(which(pca_df$cluster=="bad"),3,replace=FALSE)
+goodind<-sample(which(pca_df$cluster=="good"),2,replace=FALSE)
+badind<-sample(which(pca_df$cluster=="bad"),2,replace=FALSE)
 
 testind<-c(goodind,badind)
 pca_test<-pca_df[testind,]
@@ -123,7 +123,7 @@ confusionMatrix(pred,pca_test$cluster)
 ### Classification with UMPCA
 ```{r}
 # create the training data frame
-umpca_df<-data.frame(cbind(newfea[,1:4],bigdf))
+umpca_df<-data.frame(cbind(newfea[,1:4],scanner_pca,bigdf))
 umpca_df <- umpca_df %>%
   select(-profile_resid,-texture)
 
