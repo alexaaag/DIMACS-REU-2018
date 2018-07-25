@@ -167,7 +167,7 @@ set.seed(seed)
 mtry <- 1:5
 tunegrid <- expand.grid(.mtry=mtry)
 rf_default <- train(cluster~., data=umpca_train, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
-confusionMatrix(predict(rf_default,umpca_test),umpca_test$cluster)
+#confusionMatrix(predict(rf_default,umpca_test),umpca_test$cluster)
 varImp(rf_default)
 rf_default
 ```
