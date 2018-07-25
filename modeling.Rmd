@@ -17,16 +17,8 @@ quality_cluster
 ```
 
 ```{r}
+# label the cluster
 cluster<-quality_cluster$cluster
-#for(i in 1:length(cluster)){
-#  if(cluster[i]==3){
-#    cluster[i]<-"bad"
-#  }else if (cluster[i]==2){
-#    cluster[i]<-"medium"
-#  }else{
-#    cluster[i]<-"good"
-#  }
-#}
 for(i in 1:length(cluster)){
   if(cluster[i]==2){
     cluster[i]<-"bad"
@@ -40,6 +32,7 @@ bigdf
 ```
 
 ```{r}
+# plot the clustering result
 ggplot(bigdf,aes(x=texture,y=profile_resid,shape=as.factor(height),color=cluster))+geom_point()+coord_flip()+theme_classic()
 ```
 
@@ -59,7 +52,7 @@ for (i in 1:length(file_list)){
     #imputedf<-DMwR::knnImputation(df,k=5)
     name<-substr(file_list[i],start=11,stop=nchar(file_list[i])-17)
     namelst<-c(namelst,name)
-    if (dim(df)[2]>1628){
+    if (dim(df)[2]>1628){      # fix a minor issue where one matrix is reversed
       df<-df[1:1520,1:1628]
     }
     if (dim(df)[2]==1520){
