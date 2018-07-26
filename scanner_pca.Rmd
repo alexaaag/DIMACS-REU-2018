@@ -35,6 +35,7 @@ for (i in 1:length(file_list)){
   scannerdf<-rbind(scannerdf,Z)
 }
 
+# omit NAs with zero
 scannerdf[is.na(scannerdf)]<-0
 ```
 

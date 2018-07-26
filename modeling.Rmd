@@ -146,7 +146,7 @@ confusionMatrix(pred,umpca_test$cluster)
 ### Random Forest
 ```{r}
 # with pca
-control <- trainControl(method="repeatedcv", number=10, repeats=10,verboseIter = FALSE,sampling = "up")
+control <- trainControl(method="repeatedcv", number=10, repeats=10,verboseIter = FALSE,sampling = "down")
 seed <- 47
 metric <- "Accuracy"
 set.seed(seed)
@@ -160,14 +160,14 @@ rf_default
 
 ```{r}
 # with umpca
-control <- trainControl(method="repeatedcv", number=10, repeats=10,verboseIter = FALSE,sampling = "up")
+control <- trainControl(method="repeatedcv", number=10, repeats=10,verboseIter = FALSE,sampling="down")
 seed <- 47
 metric <- "Accuracy"
 set.seed(seed)
 mtry <- 1:5
 tunegrid <- expand.grid(.mtry=mtry)
 rf_default <- train(cluster~., data=umpca_train, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
-#confusionMatrix(predict(rf_default,umpca_test),umpca_test$cluster)
+confusionMatrix(predict(rf_default,umpca_test),umpca_test$cluster)
 varImp(rf_default)
 rf_default
 ```
