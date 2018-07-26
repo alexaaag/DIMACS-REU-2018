@@ -74,9 +74,10 @@ for (i in 1:dim(mat_pca)[1]){
 ```{r}
 # load the umpca components
 newfea<-read.csv("umpca_reconstruction/newfea.csv",header=FALSE)
-num<-1:10
+num<-1:dim(newfea)[2]
 names(newfea)<-paste("MPC",num,sep='')
-dim(newfea)
+newfea
+
 ```
 
 
@@ -86,7 +87,7 @@ dome_pca<-prcomp(mat_pca,center = TRUE)
 dome_pca$x[,1:4]
 # read the scanner pca
 scanner_pca<-read.csv("scanner_pca.csv")[,-1]
-colnames(scanner_pca)<-c("spc1","spc2","spc3","spc4")
+colnames(scanner_pca)<-c("scanner_PC1","scanner_PC2","scanner_PC3","scanner_PC4")
 ```
 
 ### Decision Tree with PCA
@@ -106,7 +107,9 @@ badind<-sample(which(pca_df$cluster=="bad"),2,replace=FALSE)
 testind<-c(goodind,badind)
 pca_test<-pca_df[testind,]
 pca_train<-pca_df[-testind,]
+```
 
+```{r}
 # run a decision tree on the training set
 require(rpart)
 require(rpart.plot)
@@ -123,7 +126,7 @@ confusionMatrix(pred,pca_test$cluster)
 ### Classification with UMPCA
 ```{r}
 # create the training data frame
-umpca_df<-data.frame(cbind(newfea[,1:4],scanner_pca,bigdf))
+umpca_df<-data.frame(cbind(newfea,scanner_pca,bigdf))
 umpca_df <- umpca_df %>%
   select(-profile_resid,-texture)
 
@@ -152,10 +155,10 @@ metric <- "Accuracy"
 set.seed(seed)
 mtry <- 1:5
 tunegrid <- expand.grid(.mtry=mtry)
-rf_default <- train(cluster~., data=pca_train, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
-confusionMatrix(predict(rf_default,pca_test),pca_test$cluster)
-varImp(rf_default)
-rf_default
+rf_pca <- train(cluster~., data=pca_train, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
+confusionMatrix(predict(rf_pca,pca_test),pca_test$cluster)
+plot(varImp(rf_pca))
+rf_pca
 ```
 
 ```{r}
@@ -166,10 +169,10 @@ metric <- "Accuracy"
 set.seed(seed)
 mtry <- 1:5
 tunegrid <- expand.grid(.mtry=mtry)
-rf_default <- train(cluster~., data=umpca_train, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
-confusionMatrix(predict(rf_default,umpca_test),umpca_test$cluster)
-varImp(rf_default)
-rf_default
+rf_umpca <- train(cluster~., data=umpca_train, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
+confusionMatrix(predict(rf_umpca,umpca_test),umpca_test$cluster)
+plot(varImp(rf_umpca))
+rf_umpca
 ```
 
 
