@@ -33,8 +33,8 @@ ggplot(bigdf,aes(x=texture,y=profile_resid,shape=as.factor(height),color=cluster
 ```
 
 ## Predictive Modeling
-### Data Preprocessing
 
+### Feature Extraction
 ```{r}
 # read in the VR measurement matrices 
 folder <- "measurements/matrix/"
@@ -76,8 +76,6 @@ for (i in 1:dim(mat_pca)[1]){
 newfea<-read.csv("umpca_reconstruction/newfea.csv",header=FALSE)
 num<-1:dim(newfea)[2]
 names(newfea)<-paste("MPC",num,sep='')
-newfea
-
 ```
 
 
@@ -90,7 +88,7 @@ scanner_pca<-read.csv("scanner_pca.csv")[,-1]
 colnames(scanner_pca)<-c("scanner_PC1","scanner_PC2","scanner_PC3","scanner_PC4")
 ```
 
-### Decision Tree with PCA
+### Create train and test
 ```{r}
 require(dplyr)
 # create the training data frame
@@ -107,13 +105,41 @@ badind<-sample(which(pca_df$cluster=="bad"),2,replace=FALSE)
 testind<-c(goodind,badind)
 pca_test<-pca_df[testind,]
 pca_train<-pca_df[-testind,]
+
+# create the training df without scanner data
+pca_df_no_scanner<-data.frame(cbind(dome_pca$x[,1:4],bigdf))
+pca_df_no_scanner <- pca_df_no_scanner %>%
+  select(-profile_resid,-texture)
+
+pca_test_no_scanner<-pca_df_no_scanner[testind,]
+pca_train_no_scanner<-pca_df_no_scanner[-testind,]
 ```
 
 ```{r}
-# run a decision tree on the training set
+# create the umpca training data frame
+umpca_df<-data.frame(cbind(newfea,scanner_pca,bigdf))
+#umpca_df<-data.frame(cbind(scanner_pca,bigdf))
+umpca_df <- umpca_df %>%
+  select(-profile_resid,-texture)
+
+umpca_test<-umpca_df[testind,]
+umpca_train<-umpca_df[-testind,]
+
+# create the training df without scanner data
+umpca_df_no_scanner<-data.frame(cbind(newfea,bigdf))
+umpca_df_no_scanner <- umpca_df_no_scanner %>%
+  select(-profile_resid,-texture)
+
+umpca_test_no_scanner<-umpca_df_no_scanner[testind,]
+umpca_train_no_scanner<-umpca_df_no_scanner[-testind,]
+
+```
+
+### Decision Tree
+```{r}
+# run a decision tree with pca
 require(rpart)
 require(rpart.plot)
-require(caret)
 tree<-rpart(cluster~., data = pca_train, method = "class",minsplit=3)
 printcp(tree)
 rpart.plot(tree)
@@ -121,22 +147,8 @@ rpart.plot(tree)
 # predict on the test set
 pred<-predict(tree,pca_test,type="class")
 confusionMatrix(pred,pca_test$cluster)
-```
 
-### Classification with UMPCA
-```{r}
-# create the training data frame
-umpca_df<-data.frame(cbind(newfea,scanner_pca,bigdf))
-umpca_df <- umpca_df %>%
-  select(-profile_resid,-texture)
-
-umpca_test<-umpca_df[testind,]
-umpca_train<-umpca_df[-testind,]
-
-# run a decision tree on the training set
-require(rpart)
-require(rpart.plot)
-require(caret)
+# run a decision tree with umpca
 tree<-rpart(cluster~., data = umpca_train, method = "class",minsplit=3)
 printcp(tree)
 rpart.plot(tree)
@@ -162,6 +174,15 @@ rf_pca
 ```
 
 ```{r}
+# pca without scanner
+set.seed(seed)
+rf_pca_no_scanner <- train(cluster~., data=pca_train_no_scanner, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
+confusionMatrix(predict(rf_pca_no_scanner,pca_test_no_scanner),pca_test_no_scanner$cluster)
+plot(varImp(rf_pca_no_scanner))
+rf_pca_no_scanner
+```
+
+```{r}
 # with umpca
 control <- trainControl(method="repeatedcv", number=10, repeats=10,verboseIter = FALSE,sampling="down")
 seed <- 47
@@ -175,94 +196,17 @@ plot(varImp(rf_umpca))
 rf_umpca
 ```
 
-
-```{r,include=FALSE}
-### SVM
-require(caret)
-
-#linear svm
-traincv.linear <- train(cluster ~ ., data=train, method="svmLinear",
-trControl = trainControl(method="cv"),
-tuneGrid= expand.grid(C=c(0.01,0.1,1,5,10)),
-preProcess = c("center", "scale"))
-traincv.linear$finalModel
-
-#radial
-traincv.radial <- train(cluster ~ ., data=train, method="svmRadial",
-trControl = trainControl(method="cv"),
-tuneGrid= expand.grid(C=c(0.01,0.1,1,5,10),sigma=c(1,2,3)),
-preProcess = c("center", "scale"))
-traincv.radial$finalModel
-
-#polynomial
-traincv.poly <- train(cluster ~ ., data=train, method="svmPoly",
-trControl = trainControl(method="cv"),
-tuneGrid= expand.grid(C=c(0.01,0.1,1,5,10),degree=c(1,2,3),scale=TRUE),
-preProcess = c("center", "scale"))
-traincv.poly$finalModel
-
-test
-pred.linear<-predict(traincv.linear,test)
-confusionMatrix(pred.linear,test$cluster)
-pred.poly<-predict(traincv.poly,test)
-confusionMatrix(pred.poly,test$cluster)
-pred.radial<-predict(traincv.radial,test)
-confusionMatrix(pred.radial,test$cluster)
-
-## regression
-df<-bigdf %>%
-  select(-cluster,-texture)
-
-resid_df<-cbind(df,newfea[,1:4])
-reg_train<-resid_df[-testind,]
-reg_test<-resid_df[testind,]
-
-# deviation~.
-dev_ls<-lm(profile_resid~.,data=reg_train)
-summary(dev_ls)
-plot(x=dev_ls$fitted.values,y=dev_ls$residuals,xlab="fitted",ylab="residual")
-abline(h=0,col="red")
-
-## lasso
-require(glmnet)
-# deviation~
-set.seed(47)
-lambda.grid = 10^seq(5, -2, length = 100)
-domes.lasso.cv <- cv.glmnet(as.matrix(reg_train[, 2:8]), reg_train$deviation, alpha = 1,
-lambda = lambda.grid, standardize = TRUE)
-coef.lasso <- coef(domes.lasso.cv, s = "lambda.min")
-
-dev_ls<-lm(deviation~fill+height+speed+PC1+PC2+PC3+PC4,data=reg_train)
-summary(dev_ls)
-plot(x=dev_reg$fitted.values,y=dev_reg$residuals,xlab="fitted",ylab="residual")
-abline(h=0,col="red")
-
-# backward selection
-dev_bck <- step(dev_ls, direction="backward")
-summary(dev_bck)
-
-# prediction on test
-lasso_pred<-predict(domes.lasso.cv,as.matrix(test[,2:9]),s="lambda.min")
-sum((lasso_pred-test$deviation)^2)
+```{r}
+# umpca without scanner
+control <- trainControl(method="repeatedcv", number=10, repeats=10,verboseIter = FALSE,sampling="down")
+seed <- 47
+metric <- "Accuracy"
+set.seed(seed)
+mtry <- 1:5
+tunegrid <- expand.grid(.mtry=mtry)
+rf_umpca_no_scanner <- train(cluster~., data=umpca_train_no_scanner, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
+confusionMatrix(predict(rf_umpca_no_scanner,umpca_test_no_scanner),umpca_test_no_scanner$cluster)
+plot(varImp(rf_umpca_no_scanner))
+rf_umpca_no_scanner
 ```
 
-```{r,include=FALSE}
-#roughness~.
-df<-qualitydf %>%
-  select(-cluster,-deviation)
-rough_df<-cbind(df,newfea[,1:4])
-train<-rough_df[-testind,]
-test<-rough_df[testind,]
-
-rough_ls<-lm(texture~height+fill+speed+PC1+PC2+PC3+PC4,train)
-summary(rough_ls)
-plot(x=rough_ls$fitted.values,y=rough_ls$residuals,xlab="fitted",ylab="residual")
-abline(h=0,col="red")
-
-rough_bck <- step(rough_ls, direction="backward")
-summary(rough_bck)
-
-## GGPAIRS plot
-require(GGally)
-ggpairs(qualitydf,aes(color=as.factor(height)))
-```
