@@ -258,18 +258,6 @@ num<-1:dim(newfea)[2]
 names(newfea)<-paste("MPC",num,sep='')
 ```
 
-```{r,include=FALSE}
-# create the umpca training data frame
-umpca_df<-data.frame(cbind(newfea,scanner_pca,bigdf))
-#umpca_df<-data.frame(cbind(scanner_pca,bigdf))
-umpca_df <- umpca_df %>%
-  select(-profile_resid,-texture)
-
-umpca_test<-umpca_df[testind,]
-umpca_train<-umpca_df[-testind,]
-
-```
-
 ```{r}
 # cluster the training samples into 2 classes
 set.seed(47)
@@ -278,14 +266,9 @@ second_cluster<-kmeans(qualitydf[-testind,][,c(1,2)],2)
 # label the cluster
 cluster<-second_cluster$cluster
 for(i in 1:length(cluster)){
-  if(cluster[i]==2){
-    cluster[i]<-"good"
-  }else{
-    cluster[i]<-"bad"
-  }
+  cluster[i]<-ifelse(cluster[i]==2,"good","bad")
 }
 cluster<-as.factor(cluster)
-cluster<-bigdf$cluster[-testind]
 vr_df<-cbind(qualitydf[-testind,],cluster)
 ```
 
@@ -293,6 +276,15 @@ vr_df<-cbind(qualitydf[-testind,],cluster)
 # run a pca on VR high resolution data
 vr_pca_train<-prcomp(mat_pca[-testind,],center = TRUE)$x[,1:4]
 vr_pca_test<-prcomp(mat_pca[testind,],center = TRUE)$x[,1:4]
+```
+
+```{r,include=FALSE}
+# create the umpca training data frame
+umpca_train_df<-data.frame(cbind(vr_df,newfea))[,-c(1,2)]
+umpca_df <- umpca_df %>%
+  select(-profile_resid,-texture)
+
+
 ```
 
 ```{r}
