@@ -7,8 +7,7 @@ This notebook provides the code for clustering, principal component analysis and
 
 Our proposed method first split the 20 samples into training (n=15) and testing (n=5) set. We first trained a preliminary classifier on the training set with scanner data that categorized the samples into three classes (good, bad and uncertain). We made predictions on the test data, then the test samples that were classified as "uncertain" were taken to a more refined classifier trained with high resolution VR measurements. The "uncertain" samples were then predicted again to either "good" or "bad". 
 
-## Models trained with only scanner data
-### K-Means Clustering
+## Labeling the data with ground truth
 ```{r,warning=FALSE}
 qualitydf<-read.csv("qualitydf.csv",header = T)
 ```
@@ -22,30 +21,20 @@ quality_cluster<-kmeans(qualitydf[,c(1,2)],2)
 # label the cluster
 cluster<-quality_cluster$cluster
 for(i in 1:length(cluster)){
-  if(cluster[i]==2){
-    cluster[i]<-"bad"
-  }else{
-    cluster[i]<-"good"
-  }
+  cluster[i]<-ifelse(cluster[i]==2,"bad","good")
 }
-cluster<-as.factor(cluster)
-bigdf<-cbind(qualitydf,cluster)
+
+# factorize the cluster label and create a big data frame
+ground_truth<-as.factor(cluster)
+bigdf<-cbind(qualitydf,ground_truth)
 
 # plot the clustering result
 ggplot(bigdf,aes(x=texture,y=profile_resid,shape=as.factor(height),color=cluster))+geom_point()+coord_flip()+theme_classic()
 ```
 
 
-### Feature Extraction
-```{r}
-# split into train and test by 3:1
-# sample 3 from good and 3 from bad
-set.seed(47)
-goodind<-sample(which(bigdf$cluster=="good"),3,replace=FALSE)
-badind<-sample(which(bigdf$cluster=="bad"),3,replace=FALSE)
-testind<-c(goodind,badind)
-```
 
+## Scanner classifier only
 ```{r,warning=FALSE}
 # read in the scanner data
 library(readr)
@@ -64,13 +53,15 @@ for (i in 1:length(file_list)){
   Z<-scanner$X4
   
   # trim X, Y and Z that are out of range
-  Y<-Y[which(abs(X)<=32)]
-  Z<-Z[which(abs(X)<=32)]
-  X<-X[which(abs(X)<=32)]
+  xTrim<-which(abs(X)<=32)
+  Y<-Y[xTrim]
+  Z<-Z[xTrim]
+  X<-X[xTrim]
 
-  X<-X[which(abs(Y)<=32)]
-  Z<-Z[which(abs(Y)<=32)]
-  Y<-Y[which(abs(Y)<=32)]
+  yTrim<-which(abs(Y)<=32)
+  Z<-Z[yTrim]
+  X<-X[yTrim]
+  Y<-Y[yTrim]
   
   # put Z of each sample into the rows of the df
   scannerdf<-rbind(scannerdf,Z)
@@ -81,6 +72,14 @@ scannerdf[is.na(scannerdf)]<-0
 dim(scannerdf)
 ```
 
+```{r}
+# split into train and test by 3:1
+# sample 3 from good and 3 from bad
+set.seed(4747)
+goodind<-sample(which(bigdf$cluster=="good"),3,replace=FALSE)
+badind<-sample(which(bigdf$cluster=="bad"),3,replace=FALSE)
+testind<-c(goodind,badind)
+```
 
 ```{r}
 # extract pca from scanner training set
@@ -93,29 +92,12 @@ scanner_pca_test<-prcomp(scanner_mat_test,center=TRUE)$x[,1:4]
 colnames(scanner_pca_test)<-c("scanner_PC1","scanner_PC2","scanner_PC3","scanner_PC4")
 ```
 
-### Scanner data only
+
 ```{r}
 require(dplyr)
 # create the training data frame
-train_df<-data.frame(cbind(scanner_pca_train,bigdf[-testind,]))
-train_df <- train_df %>%
-  select(-profile_resid,-texture)
-
-test_df<-data.frame(cbind(scanner_pca_test,bigdf[testind,]))
-test_df <- test_df %>%
-  select(-profile_resid,-texture)
-```
-
-```{r,include=FALSE}
-# create the umpca training data frame
-umpca_df<-data.frame(cbind(newfea,scanner_pca,bigdf))
-#umpca_df<-data.frame(cbind(scanner_pca,bigdf))
-umpca_df <- umpca_df %>%
-  select(-profile_resid,-texture)
-
-umpca_test<-umpca_df[testind,]
-umpca_train<-umpca_df[-testind,]
-
+train_df<-data.frame(cbind(scanner_pca_train,bigdf[-testind,][,-c(1,2)]))
+test_df<-data.frame(cbind(scanner_pca_test,bigdf[testind,][,-c(1,2)]))
 ```
 
 
@@ -123,9 +105,9 @@ umpca_train<-umpca_df[-testind,]
 ```{r}
 # using only scanner data and pca
 library(Metrics)
-control <- trainControl(method="oob",verboseIter = FALSE,sampling = "up")
+control<-trainControl(method="cv",number=3,summaryFunction=twoClassSummary,classProbs = TRUE)
 seed <- 47
-metric <- "Accuracy"
+metric <- "ROC"
 set.seed(seed)
 mtry <- 1:7
 tunegrid <- expand.grid(.mtry=mtry)
@@ -135,11 +117,14 @@ confusionMatrix(predict(rf_pca,test_df),test_df$cluster)
 ```
 
 ```{r}
-plot(varImp(rf_pca))
+a<-varImp(rf_pca)
+head(rownames(a$importance),3)
 ```
 
 
 ## Proposed Method using both scanner and high resolution
+
+### Training the first classifier
 ```{r}
 # split into train and test with balanced
 new_train<-qualitydf[-testind,]
@@ -149,13 +134,7 @@ set.seed(47)
 clustering<-kmeans(new_train[,c(1,2)],3)
 cluster<-clustering$cluster
 for(i in 1:length(cluster)){
-  if(cluster[i]==3){
-    cluster[i]<-"bad"
-  }else if (cluster[i]==2){
-    cluster[i]<-"good"
-  }else{
-    cluster[i]<-"uncertain"
-  }
+  cluster[i]<-ifelse(cluster[i]==3,"good",ifelse(cluster[i]==2,"uncertain","bad"))
 }
 cluster<-as.factor(cluster)
 new_train<-cbind(new_train,cluster)
@@ -232,6 +211,7 @@ tunegrid <- expand.grid(.mtry=mtry)
 rf_scanner <- train(cluster~., data=scanner_train_df, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
 rf_scanner
 predict(rf_scanner,scanner_test_df)
+bigdf[testind,]$cluster
 ```
 
 ### Training the second classifier
@@ -276,6 +256,18 @@ for (i in 1:dim(train_mat_pca)[1]){
 newfea<-read.csv("umpca_reconstruction/newfea.csv",header=FALSE)
 num<-1:dim(newfea)[2]
 names(newfea)<-paste("MPC",num,sep='')
+```
+
+```{r,include=FALSE}
+# create the umpca training data frame
+umpca_df<-data.frame(cbind(newfea,scanner_pca,bigdf))
+#umpca_df<-data.frame(cbind(scanner_pca,bigdf))
+umpca_df <- umpca_df %>%
+  select(-profile_resid,-texture)
+
+umpca_test<-umpca_df[testind,]
+umpca_train<-umpca_df[-testind,]
+
 ```
 
 ```{r}
