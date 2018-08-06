@@ -73,25 +73,29 @@ dim(scannerdf)
 ```
 
 ```{r}
-# split into train and test by 3:1
+# split into train and test by 7:3
 # sample 3 from good and 3 from bad
 set.seed(4747)
 goodind<-sample(which(bigdf$ground_truth=="good"),3,replace=FALSE)
 badind<-sample(which(bigdf$ground_truth=="bad"),3,replace=FALSE)
 testind<-c(goodind,badind)
+#testind<-sample(nrow(bigdf),6,replace = FALSE)
 bigdf[testind,]
 ```
 
 ```{r}
 # extract pca from scanner training set
 scanner_mat_train<-as.matrix(scannerdf)[-testind,]
-scanner_pca_train<-prcomp(scanner_mat_train,center=TRUE)$x[,1:4]
+pca<-prcomp(scanner_mat_train,center=TRUE)
+summary(pca)
+scanner_pca_train<-pca$x[,1:4]
 colnames(scanner_pca_train)<-c("scanner_PC1","scanner_PC2","scanner_PC3","scanner_PC4")
 
 scanner_mat_test<-as.matrix(scannerdf)[testind,]
 scanner_pca_test<-prcomp(scanner_mat_test,center=TRUE)$x[,1:4]
 colnames(scanner_pca_test)<-c("scanner_PC1","scanner_PC2","scanner_PC3","scanner_PC4")
 ```
+
 
 
 ```{r}
@@ -112,14 +116,14 @@ metric <- "ROC"
 set.seed(seed)
 mtry <- 1:7 
 tunegrid <- expand.grid(.mtry=mtry)
-rf_pca <- train(cluster~., data=train_df, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
+rf_pca <- train(ground_truth~., data=train_df, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
 rf_pca
-confusionMatrix(predict(rf_pca,test_df),test_df$cluster)
+pred_scanner<-predict(rf_pca,test_df)
+confusionMatrix(predict(rf_pca,test_df),test_df$ground_truth)
 ```
 
 ```{r}
-a<-varImp(rf_pca)
-head(rownames(a$importance),3)
+varImp(rf_pca)
 ```
 
 
@@ -204,7 +208,7 @@ scanner_train_df<-data.frame(cbind(scanner_pca_train,new_train[,-c(1,2)]))
 scanner_test_df<-data.frame(cbind(scanner_pca_test,new_test[,-c(1,2)]))
 
 control <- trainControl(method="cv",number=3,sampling = "up",summaryFunction=multiClassSummary,classProbs = TRUE)
-seed <- 47
+seed <- 4747
 metric <- "ROC"
 set.seed(seed)
 mtry <- 1:7
@@ -212,7 +216,8 @@ tunegrid <- expand.grid(.mtry=mtry)
 rf_scanner <- train(cluster~., data=scanner_train_df, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
 rf_scanner
 predict(rf_scanner,scanner_test_df)
-bigdf[testind,]$cluster
+bigdf[testind,]$ground_truth
+plot(varImp(rf_scanner))
 ```
 
 ### Training the second classifier
@@ -245,11 +250,13 @@ dim(mat_pca)
 ```{r}
 # export the matrices for matlab umpca code
 trainind<-seq(1,20,by=1)[-testind]
+file.remove(file.path("umpca_reconstruction/matrices/train/", list.files("umpca_reconstruction/matrices/train/"))) 
 for (i in trainind){
   mat<-matrix(mat_pca[i,],1520,1628);
   write.csv(mat,paste("umpca_reconstruction/matrices/train/",namelst[i],".csv",sep=''))
 }
 
+file.remove(file.path("umpca_reconstruction/matrices/test/", list.files("umpca_reconstruction/matrices/test/"))) 
 for (i in testind){
   mat<-matrix(mat_pca[i,],1520,1628);
   write.csv(mat,paste("umpca_reconstruction/matrices/test/",namelst[i],".csv",sep=''))
@@ -260,11 +267,11 @@ for (i in testind){
 # load the umpca components from matlab
 newfea_train<-read.csv("umpca_reconstruction/newfea_train.csv",header=FALSE)
 num<-1:dim(newfea_train)[2]
-names(newfea_train)<-paste("MPC",num,sep='')
+names(newfea_train)<-paste("EMP",num,sep='')
 
 newfea_test<-read.csv("umpca_reconstruction/newfea_test.csv",header=FALSE)
 num<-1:dim(newfea_test)[2]
-names(newfea_test)<-paste("MPC",num,sep='')
+names(newfea_test)<-paste("EMP",num,sep='')
 ```
 
 ```{r}
@@ -287,20 +294,16 @@ vr_pca_train<-prcomp(mat_pca[-testind,],center = TRUE)$x[,1:4]
 vr_pca_test<-prcomp(mat_pca[testind,],center = TRUE)$x[,1:4]
 ```
 
-```{r,include=FALSE}
-# create the umpca training data frame
-umpca_train_df<-data.frame(cbind(vr_df,newfea_train))[,-c(1,2)]
-umpca_test_df<-data.frame(cbind(new_test,newfea_test))[,-c(1,2)]
-```
-
 ```{r}
 # rf with pca
 vr_train_df<-data.frame(cbind(vr_pca_train,vr_df[,-c(1,2)]))
 vr_test_df<-data.frame(cbind(vr_pca_test,new_test[,-c(1,2)]))
 
-#control<-trainControl(method="cv",number=3,sampling = "up",summaryFunction=twoClassSummary,classProbs = TRUE)
-seed <- 47
-#metric <- "ROC"
+control<-trainControl(method="cv",number=3,sampling = "up",summaryFunction=twoClassSummary,classProbs = TRUE)
+seed <- 4747
+#control<-trainControl(method="oob")
+#metric<-"Accuracy"
+metric <- "ROC"
 set.seed(seed)
 mtry <- 1:7
 tunegrid <- expand.grid(.mtry=mtry)
@@ -309,16 +312,33 @@ rf_vr
 confusionMatrix(predict(rf_vr,vr_test_df),bigdf[testind,]$ground_truth)
 ```
 
+```{r,include=FALSE}
+# create the umpca training data frame
+umpca_train_df<-data.frame(cbind(vr_df,newfea_train))[,-c(1,2)]
+umpca_test_df<-data.frame(cbind(new_test,newfea_test))[,-c(1,2)]
+```
+
 ```{r}
 # rf with umpca
-#control<-trainControl(method="cv",number=3,sampling = "up",summaryFunction=twoClassSummary,classProbs = TRUE)
-control<-trainControl(method="oob")
+control<-trainControl(method="cv",number=3,sampling = "up",summaryFunction=twoClassSummary,classProbs = TRUE)
+#control<-trainControl(method="oob")
 seed <- 47
-metric <- "Accuracy"
+metric <- "ROC"
 set.seed(seed)
 mtry <- 1:7
 tunegrid <- expand.grid(.mtry=mtry)
 rf_vr_umpca <- train(cluster~., data=umpca_train_df, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
-rf_vr_umpca
-confusionMatrix(predict(rf_vr_umpca,umpca_test_df),bigdf[testind,]$ground_truth)
+plot(varImp(rf_vr_umpca))
+pred_umpca<-predict(rf_vr_umpca,umpca_test_df)
+confusionMatrix(pred_umpca,bigdf[testind,]$ground_truth)
+```
+
+```{r}
+library(pROC)
+roc1 <- roc(pred_umpca,
+            bigdf[testind,]$ground_truth,
+            # arguments for plot
+            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
+            print.auc=TRUE, show.thres=TRUE)
+
 ```

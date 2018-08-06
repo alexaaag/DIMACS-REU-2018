@@ -11,7 +11,7 @@ require(dtw)
 ```
 
 ```{r}
-folder <- "umpca_reconstruction/"
+folder <- "umpca_reconstruction/reconstruction/"
 file_list <- list.files(path = folder, pattern = "*.csv")
 
 nsample=length(file_list)
@@ -22,19 +22,19 @@ for (i in 1:length(file_list)){
 ```
 
 ```{r}
-image(as.matrix(hat_2_1),main="MPC2",asp=1,xlab="(a)")
+image(as.matrix(hat_1_1),main="MPC1",asp=1)
 ```
 
 ```{r}
-image(as.matrix(hat_2_2),main="MPC2",asp=1)
+image(as.matrix(hat_1_2),main="MPC2",asp=1)
 ```
 
 ```{r}
-image(as.matrix(hat_2_3),main="MPC3",asp=1)
+image(as.matrix(hat_1_3),main="MPC3",asp=1)
 ```
 
 ```{r}
-image(as.matrix(hat_4_4),main="MPC4",asp=1)
+image(as.matrix(hat_1_4),main="MPC4",asp=1)
 ```
 
 
