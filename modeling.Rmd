@@ -244,18 +244,27 @@ dim(mat_pca)
 
 ```{r}
 # export the matrices for matlab umpca code
-train_mat_pca<-mat_pca[-testind,]
-for (i in 1:dim(train_mat_pca)[1]){
-  mat<-matrix(train_mat_pca[i,],1520,1628);
-  write.csv(mat,paste("umpca_reconstruction/matrices/train",namelst[i],".csv",sep=''))
+trainind<-seq(1,20,by=1)[-testind]
+for (i in trainind){
+  mat<-matrix(mat_pca[i,],1520,1628);
+  write.csv(mat,paste("umpca_reconstruction/matrices/train/",namelst[i],".csv",sep=''))
+}
+
+for (i in testind){
+  mat<-matrix(mat_pca[i,],1520,1628);
+  write.csv(mat,paste("umpca_reconstruction/matrices/test/",namelst[i],".csv",sep=''))
 }
 ```
 
 ```{r}
 # load the umpca components from matlab
-newfea<-read.csv("umpca_reconstruction/newfea.csv",header=FALSE)
-num<-1:dim(newfea)[2]
-names(newfea)<-paste("MPC",num,sep='')
+newfea_train<-read.csv("umpca_reconstruction/newfea_train.csv",header=FALSE)
+num<-1:dim(newfea_train)[2]
+names(newfea_train)<-paste("MPC",num,sep='')
+
+newfea_test<-read.csv("umpca_reconstruction/newfea_test.csv",header=FALSE)
+num<-1:dim(newfea_test)[2]
+names(newfea_test)<-paste("MPC",num,sep='')
 ```
 
 ```{r}
@@ -280,21 +289,36 @@ vr_pca_test<-prcomp(mat_pca[testind,],center = TRUE)$x[,1:4]
 
 ```{r,include=FALSE}
 # create the umpca training data frame
-umpca_train_df<-data.frame(cbind(vr_df,newfea))[,-c(1,2)]
-
+umpca_train_df<-data.frame(cbind(vr_df,newfea_train))[,-c(1,2)]
+umpca_test_df<-data.frame(cbind(new_test,newfea_test))[,-c(1,2)]
 ```
 
 ```{r}
+# rf with pca
 vr_train_df<-data.frame(cbind(vr_pca_train,vr_df[,-c(1,2)]))
 vr_test_df<-data.frame(cbind(vr_pca_test,new_test[,-c(1,2)]))
 
-control<-trainControl(method="cv",number=3,sampling = "up",summaryFunction=twoClassSummary,classProbs = TRUE)
+#control<-trainControl(method="cv",number=3,sampling = "up",summaryFunction=twoClassSummary,classProbs = TRUE)
 seed <- 47
-metric <- "ROC"
+#metric <- "ROC"
 set.seed(seed)
 mtry <- 1:7
 tunegrid <- expand.grid(.mtry=mtry)
 rf_vr <- train(cluster~., data=vr_train_df, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
 rf_vr
-confusionMatrix(predict(rf_vr,vr_test_df),bigdf[testind,]$cluster)
+confusionMatrix(predict(rf_vr,vr_test_df),bigdf[testind,]$ground_truth)
+```
+
+```{r}
+# rf with umpca
+#control<-trainControl(method="cv",number=3,sampling = "up",summaryFunction=twoClassSummary,classProbs = TRUE)
+control<-trainControl(method="oob")
+seed <- 47
+metric <- "Accuracy"
+set.seed(seed)
+mtry <- 1:7
+tunegrid <- expand.grid(.mtry=mtry)
+rf_vr_umpca <- train(cluster~., data=umpca_train_df, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
+rf_vr_umpca
+confusionMatrix(predict(rf_vr_umpca,umpca_test_df),bigdf[testind,]$ground_truth)
 ```
