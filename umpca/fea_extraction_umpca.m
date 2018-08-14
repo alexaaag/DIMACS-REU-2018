@@ -29,62 +29,59 @@ end
 
 %% UMPCA on train set
 N=ndims(T_train)-1;% Order of the tensor sample
-Is=size(T_train);% 1520x1628x20
+Is=size(T_train);% 1520x1628x16
 numSpl=Is(3);%There are 20 samples
-numP=4;
-[Us,TXmean,odrIdx]  = UMPCA(T_train,numP); % run MPCA
+numP=4; %set number of projections to 4
+[Us_train,TXmean,odrIdx]  = UMPCA(T_train,numP); %run UMPCA
 T=T_train-repmat(TXmean,[ones(1,N), numSpl]);%Centering
 numP=length(odrIdx);   
 
 % calculate the new features 
 newfea_train = zeros(numSpl,numP);
 for iP=1:numP
-    projFtr=ttv(tensor(T),Us(:,iP),[1 2]);
+    projFtr=ttv(tensor(T),Us_train(:,iP),[1 2]);
     newfea_train(:,iP)=projFtr.data;
 end
 newfea_train = newfea_train(:,odrIdx);   % new features of train
-%export_dir = '/Users/alexa712/Documents/School/DIMACS REU/DIMACS-REU-2018/umpca_reconstruction';
-csvwrite(fullfile('newfea_train.csv'),newfea_train);
+csvwrite(fullfile('newfea_train.csv'),newfea_train);  %export new features of train set
 size(newfea_train)
 
 %% TEST UMPCA
 N=ndims(T_test)-1;% Order of the tensor sample
-Is=size(T_test);% 1520x1628x20
-numSpl=Is(3);%There are 20 samples
+Is=size(T_test);% 1520x1628x4
+numSpl=Is(3);%There are 4 samples
 numP=4;
-[Us,TXmean,odrIdx]  = UMPCA(T_test,numP); % run UMPCA
+[Us_test,TXmean,odrIdx]  = UMPCA(T_test,numP); % run UMPCA
 T=T_test-repmat(TXmean,[ones(1,N), numSpl]);%Centering
 numP=length(odrIdx);   
 
 % calculate the new features 
 newfea_test = zeros(numSpl,numP);
 for iP=1:numP
-    projFtr=ttv(tensor(T),Us(:,iP),[1 2]);
+    projFtr=ttv(tensor(T),Us_test(:,iP),[1 2]);
     newfea_test(:,iP)=projFtr.data;
 end
 newfea_test = newfea_test(:,odrIdx);   % new features of test
-csvwrite(fullfile(export_dir,'newfea_test.csv'),newfea_test);
+csvwrite(fullfile('newfea_test.csv'),newfea_test); 
 size(newfea_test)
 
-%% reconstruction
-% create the U matrices
+%% reconstruct the projections
 ncomp=numP;
-proj=cell(ncomp,1);
+proj=cell(ncomp,1); % store each projection component
 for i = 1:ncomp
-u1=Us{1,i};
-u2=Us{2,i};
+u1=Us_train{1,i};
+u2=Us_train{2,i};
 U=u1*transpose(u2);
 proj{i}=U;    
 end
-%%
-export_dir = '/Users/alexa712/Documents/School/DIMACS REU/DIMACS-REU-2018/umpca_reconstruction/reconstruction';
-tHat=zeros(1520,1628,14,ncomp);
-for i = 1
-    for j = 1:ncomp
-      recons=newfea(i,j)*proj{j};
-      tHat(:,:,i,j)=recons;
-      csvwrite(fullfile(export_dir,sprintf('%s_%d_%d%s','hat',i,j,'.csv')),recons);
-    end
+%% reconstruct the first sample using the four EMPs
+export_dir = 'reconstruction';
+tHat=zeros(1520,1628,nTrain,ncomp);
+
+% export the reconstructed matrix using the 4 components
+for j = 1:ncomp
+    recons=newfea_train(i,j)*proj{j};
+    csvwrite(fullfile(export_dir,sprintf('%s_%d%s','hat',j,'.csv')),recons);
 end
 
 %%
