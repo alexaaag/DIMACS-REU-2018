@@ -30,10 +30,10 @@ end
 %% UMPCA on train set
 N=ndims(T_train)-1;% Order of the tensor sample
 Is=size(T_train);% 1520x1628x16
-numSpl=Is(3);%There are 20 samples
+numSpl=Is(3);%There are 16 samples
 numP=4; %set number of projections to 4
-[Us_train,TXmean,odrIdx]  = UMPCA(T_train,numP); %run UMPCA
-T=T_train-repmat(TXmean,[ones(1,N), numSpl]);%Centering
+[Us_train,TXmean_train,odrIdx]  = UMPCA(T_train,numP); %run UMPCA
+T=T_train-repmat(TXmean_train,[ones(1,N), numSpl]);%Centering
 numP=length(odrIdx);   
 
 % calculate the new features 
@@ -76,15 +76,16 @@ proj{i}=U;
 end
 %% reconstruct the first sample using the four EMPs
 export_dir = 'reconstruction';
-tHat=zeros(1520,1628,nTrain,ncomp);
+tHat=zeros(1520,1628,ncomp);
 
 % export the reconstructed matrix using the 4 components
 for j = 1:ncomp
-    recons=newfea_train(i,j)*proj{j};
+    recons=newfea_train(i,j)*proj{j}+TXmean_train;
+    tHat(:,:,j)=recons;
     csvwrite(fullfile(export_dir,sprintf('%s_%d%s','hat',j,'.csv')),recons);
 end
 
 %%
-contourf(tHat(:,:,1,2))
+contourf(tHat(:,:,4))
 end
 

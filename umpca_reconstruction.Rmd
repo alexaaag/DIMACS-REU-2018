@@ -3,6 +3,8 @@ title: "R Notebook"
 output: html_notebook
 ---
 
+This notebook provides the image of the reconstructed matrix.
+
 ```{r,warning=FALSE,echo=FALSE}
 require(dplyr)
 require(ggplot2)
@@ -11,7 +13,7 @@ require(dtw)
 ```
 
 ```{r}
-folder <- "umpca_reconstruction/reconstruction/"
+folder <- "umpca/reconstruction/"
 file_list <- list.files(path = folder, pattern = "*.csv")
 
 nsample=length(file_list)
@@ -22,19 +24,19 @@ for (i in 1:length(file_list)){
 ```
 
 ```{r}
-image(as.matrix(hat_1_1),main="MPC1",asp=1)
+image(as.matrix(hat_1),main="MPC1",asp=1)
 ```
 
 ```{r}
-image(as.matrix(hat_1_2),main="MPC2",asp=1)
+image(as.matrix(hat_2),main="MPC2",asp=1)
 ```
 
 ```{r}
-image(as.matrix(hat_1_3),main="MPC3",asp=1)
+image(as.matrix(hat_3),main="MPC3",asp=1)
 ```
 
 ```{r}
-image(as.matrix(hat_1_4),main="MPC4",asp=1)
+image(as.matrix(hat_4),main="MPC4",asp=1)
 ```
 
 

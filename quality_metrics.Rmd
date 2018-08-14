@@ -3,16 +3,15 @@ title: "Developing Quality Metrics"
 output: html_notebook
 ---
 
-```{r,warning=FALSE,echo=FALSE}
-require(dplyr)
-require(ggplot2)
-require(readr)
-require(dtw)
-```
-
 This is a r notebook that uses dynamic time warping to align the profile data. Then we used a LOESS regression
-to quantify the error. 
+to quantify the profile deviation. 
 We chose fill 20 speed 20 as our reference sample. 
+```{r,warning=FALSE,echo=FALSE}
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(dtw)
+```
 
 ## Develop quality metrics
 ### Data Preprocessing
@@ -60,21 +59,6 @@ profile_lst[[2*12+2]]<-profile_lst[[2*12+2]][which(profile_lst[[2*12+1]]>10000)]
 profile_lst[[2*12+1]]<-profile_lst[[2*12+1]][which(profile_lst[[2*12+1]]>10000)]
 ```
 
-```{r}
-# before alignment demonstration
-plot(xRef,zRef,col="orange",cex=0.2,xlab="X (um)",ylab="Z (um)",main = "Before Alignment",asp=1)
-points(profile_lst[[4*12+1]],profile_lst[[4*12+2]],cex=0.2,col="blue",asp=1)
-legend("topright", legend=c("reference", "data"),
-       col=c("orange", "blue"), lty=1:2, cex=0.8)
-
-# alignment demonstration
-Z<-profile_lst[[50]]
-alignmentOBE <-
-  dtw(Z,zRef,
-      keep=TRUE,step=asymmetric)
-plot(alignmentOBE,type="three",off=1,main="Matching",asp=0.05)
-```
-
 ### Profile Alignment and Quantifying Errors
 Now let's try a loop implementation too return all the alignments of profile 1
 ```{r}
@@ -106,8 +90,6 @@ for (j in seq(1,2*5+1,by=2)){
   alignment<-dtw(Z,zRef,k=T) # dtw alignment
  
   # take the highest point of ref and find its matching indices with the compared data
-#  matchdata<-alignment$index1[which(alignment$index2==which(zRef==max(zRef)))] 
-#  matchref<-alignment$index2[which(alignment$index2==which(zRef==max(zRef)))]
   matchdata<-alignment$index1[which(alignment$index2==as.integer(length(Z)/5))]
   matchref<-alignment$index2[which(alignment$index2==as.integer(length(Z)/5))]
   # align in both x and z direction
@@ -151,6 +133,30 @@ for (j in seq(1,2*5+1,by=2)){
 }
 ```
 
+```{r}
+# before alignment demonstration
+ref1_ind<-3*12+1
+xRef<-profile_lst[[ref1_ind]] # load xref (profile 20 20 )
+zRef<-profile_lst[[ref1_ind+1]] #load zref
+plot(xRef,zRef,col="orange",cex=0.2,xlab="X (um)",ylab="Z (um)",main = "Before Alignment",asp=1)
+points(profile_lst[[4*12+1]],profile_lst[[4*12+2]],cex=0.2,col="blue",asp=1)
+legend("topright", legend=c("reference", "data"),
+       col=c("orange", "blue"), lty=1:2, cex=0.8)
+```
+
+```{r}
+# after alignment
+j<-1 # which profile
+p<-7# the fourth sample
+ndf<-(j-1)/2
+ref1_ind<-3*12+j
+myPlot<-function(index) {points(y=bigdf[[index+1]],x=bigdf[[index]],cex=0.2,col="blue")}
+plot(x=profile_lst[[ref1_ind]],y=profile_lst[[ref1_ind+1]],cex=0.2,col="orange",asp=1,,xlab="X (um)",ylab="Z (um)",main="Aligned Curves")
+lapply(seq(ndf*(nsample-1)*2+p,ndf*(nsample-1)*2+p,by=2),FUN=myPlot)
+legend("topright", legend=c("reference", "data"),
+       col=c("orange", "blue"), lty=1:2, cex=0.8)
+```
+
 
 
 ```{r}
@@ -170,18 +176,7 @@ for (i in 1:(nsample-1)){
 }
 ```
 
-```{r}
-# plots that check alignment 
-j<-1 # which profile
-p<-7# which sample
-ndf<-(j-1)/2
-ref1_ind<-3*12+j
-myPlot<-function(index) {points(y=bigdf[[index+1]],x=bigdf[[index]],cex=0.2,col="blue")}
-plot(x=profile_lst[[ref1_ind]],y=profile_lst[[ref1_ind+1]],cex=0.2,col="orange",asp=1,,xlab="X (um)",ylab="Z (um)",main="Aligned Curves")
-lapply(seq(ndf*(nsample-1)*2+p,ndf*(nsample-1)*2+p,by=2),FUN=myPlot)
-legend("topright", legend=c("reference", "data"),
-       col=c("orange", "blue"), lty=1:2, cex=0.8)
-```
+
 
 
 ### Import Roughness 

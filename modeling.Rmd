@@ -3,16 +3,17 @@ title: "Predictive Modeling"
 output: html_notebook
 ---
 
-This notebook provides the code for clustering, principal component analysis and classification trees/random forest.
+This notebook provides the code for classification.
 
-Our proposed method first split the 20 samples into training (n=15) and testing (n=5) set. We first trained a preliminary classifier on the training set with scanner data that categorized the samples into three classes (good, bad and uncertain). We made predictions on the test data, then the test samples that were classified as "uncertain" were taken to a more refined classifier trained with high resolution VR measurements. The "uncertain" samples were then predicted again to either "good" or "bad". 
+Our proposed method first split the 20 samples into training (n=14) and testing (n=6) set. We first trained a preliminary classifier on the training set with scanner data that categorized the samples into three classes (good, bad and uncertain). We made predictions on the test data, then the test samples that were classified as "uncertain" were taken to a more refined classifier trained with high resolution VR measurements. The "uncertain" samples were then predicted again to either "good" or "bad". 
 
-## Labeling the data with ground truth
+## Label the data with ground truth
+
+We first give all the samples of a ground truth label of either good or bad using K-means clustering. 
 ```{r,warning=FALSE}
+# read the quality metrics
 qualitydf<-read.csv("qualitydf.csv",header = T)
-```
 
-```{r}
 # clustering with profile resid and roughness to give the samples a ground "truth"
 set.seed(4747)
 library(ggplot2)
@@ -31,14 +32,16 @@ bigdf<-cbind(qualitydf,ground_truth)
 # plot the clustering result
 ggplot(bigdf,aes(x=texture,y=profile_resid,shape=as.factor(height),color=cluster))+geom_point()+coord_flip()+theme_classic()
 ```
-
-
+The clustering result shows that nGood = nBad = 10
 
 ## Scanner classifier only
+
+We now train a classifier with only scanner data. We use this classifier as a comparison to our proposed method to evaluate their predictive strength.
+
 ```{r,warning=FALSE}
-# read in the scanner data
+# read the scanner height data
 library(readr)
-folder <- "~/Documents/School/DIMACS REU/measurements/scanner-data/"
+folder <- "measurements/scanner/"
 file_list <- list.files(path = folder, pattern = "*.obj")
 
 scannerdf<-data.frame()
@@ -79,40 +82,39 @@ set.seed(4747)
 goodind<-sample(which(bigdf$ground_truth=="good"),3,replace=FALSE)
 badind<-sample(which(bigdf$ground_truth=="bad"),3,replace=FALSE)
 testind<-c(goodind,badind)
-#testind<-sample(nrow(bigdf),6,replace = FALSE)
 bigdf[testind,]
 ```
 
 ```{r}
-# extract pca from scanner training set
+# extract pca from scanner train set
 scanner_mat_train<-as.matrix(scannerdf)[-testind,]
 pca<-prcomp(scanner_mat_train,center=TRUE)
 summary(pca)
 scanner_pca_train<-pca$x[,1:4]
 colnames(scanner_pca_train)<-c("scanner_PC1","scanner_PC2","scanner_PC3","scanner_PC4")
 
+# extract pca from scanner test set
 scanner_mat_test<-as.matrix(scannerdf)[testind,]
 scanner_pca_test<-prcomp(scanner_mat_test,center=TRUE)$x[,1:4]
 colnames(scanner_pca_test)<-c("scanner_PC1","scanner_PC2","scanner_PC3","scanner_PC4")
 ```
 
 
-
 ```{r}
-require(dplyr)
 # create the training data frame
 train_df<-data.frame(cbind(scanner_pca_train,bigdf[-testind,][,-c(1,2)]))
 test_df<-data.frame(cbind(scanner_pca_test,bigdf[testind,][,-c(1,2)]))
 ```
 
-
-### Random Forest
+### Train a Random Forest
 ```{r}
-# using only scanner data and pca
+# using only scanner pca
 library(Metrics)
+
+# 3-fold cv
 control<-trainControl(method="cv",number=3,summaryFunction=twoClassSummary,classProbs = TRUE)
 seed <- 47
-metric <- "ROC"
+metric <- "ROC"  # use ROC metric
 set.seed(seed)
 mtry <- 1:7 
 tunegrid <- expand.grid(.mtry=mtry)
@@ -121,20 +123,23 @@ rf_pca
 pred_scanner<-predict(rf_pca,test_df)
 confusionMatrix(predict(rf_pca,test_df),test_df$ground_truth)
 ```
+The most optimal cv ROC score is 0.5648. The test accuracy is 0.6667.
 
 ```{r}
+# show variable importance
 varImp(rf_pca)
 ```
 
 
 ## Proposed Method using both scanner and high resolution
-
 ### Training the first classifier
+The first classifier is trained with only scanner data. We first label the training samples with good, bad or uncertain. Then we predict the test samples. This is a multiclass classification.
 ```{r}
-# split into train and test with balanced
+# split into train and test 
 new_train<-qualitydf[-testind,]
 new_test<-qualitydf[testind,]
-# label the cluster
+
+# cluster the training samples into good or bad
 set.seed(47)
 clustering<-kmeans(new_train[,c(1,2)],3)
 cluster<-clustering$cluster
@@ -144,13 +149,14 @@ for(i in 1:length(cluster)){
 cluster<-as.factor(cluster)
 new_train<-cbind(new_train,cluster)
 
-
 # plot the clustering result
 ggplot(new_train,aes(x=texture,y=profile_resid,shape=as.factor(height),color=cluster))+geom_point()+coord_flip()+theme_classic()
 ```
 
+nGood:nBad:nUncertain = 3:4:7
+
 ```{r}
-# multiclass summary function
+# a multiclass summary function that will be used for multiclass classification
 
 library(compiler)
 multiClassSummary <- cmpfun(function (data, lev = NULL, model = NULL){
@@ -203,10 +209,11 @@ return(stats)
 ```
 
 ```{r} 
-library(Metrics)
+# train the first classifier
 scanner_train_df<-data.frame(cbind(scanner_pca_train,new_train[,-c(1,2)]))
 scanner_test_df<-data.frame(cbind(scanner_pca_test,new_test[,-c(1,2)]))
 
+# 
 control <- trainControl(method="cv",number=3,sampling = "up",summaryFunction=multiClassSummary,classProbs = TRUE)
 seed <- 4747
 metric <- "ROC"
@@ -219,6 +226,7 @@ predict(rf_scanner,scanner_test_df)
 bigdf[testind,]$ground_truth
 plot(varImp(rf_scanner))
 ```
+The optimal cv ROC score is 0.5388. All the test samples are predicted as uncertain.
 
 ### Training the second classifier
 ```{r}
@@ -248,32 +256,37 @@ dim(mat_pca)
 ```
 
 ```{r}
-# export the matrices for matlab umpca code
+# export the high resolution matrices for matlab umpca code
 trainind<-seq(1,20,by=1)[-testind]
-file.remove(file.path("umpca_reconstruction/matrices/train/", list.files("umpca_reconstruction/matrices/train/"))) 
+# clear previous files before writing the new ones
+file.remove(file.path("umpca/matrices/train/", list.files("umpca/matrices/train/"))) 
+
+# export train matrices
 for (i in trainind){
   mat<-matrix(mat_pca[i,],1520,1628);
-  write.csv(mat,paste("umpca_reconstruction/matrices/train/",namelst[i],".csv",sep=''))
+  write.csv(mat,paste("umpca/matrices/train/",namelst[i],".csv",sep=''))
 }
 
-file.remove(file.path("umpca_reconstruction/matrices/test/", list.files("umpca_reconstruction/matrices/test/"))) 
+# export test matrices
+file.remove(file.path("umpca/matrices/test/", list.files("umpca/matrices/test/"))) 
 for (i in testind){
   mat<-matrix(mat_pca[i,],1520,1628);
-  write.csv(mat,paste("umpca_reconstruction/matrices/test/",namelst[i],".csv",sep=''))
+  write.csv(mat,paste("umpca/matrices/test/",namelst[i],".csv",sep=''))
 }
 ```
 
 ```{r}
 # load the umpca components from matlab
-newfea_train<-read.csv("umpca_reconstruction/newfea_train.csv",header=FALSE)
+newfea_train<-read.csv("umpca/newfea_train.csv",header=FALSE)
 num<-1:dim(newfea_train)[2]
 names(newfea_train)<-paste("EMP",num,sep='')
 
-newfea_test<-read.csv("umpca_reconstruction/newfea_test.csv",header=FALSE)
+newfea_test<-read.csv("umpca/newfea_test.csv",header=FALSE)
 num<-1:dim(newfea_test)[2]
 names(newfea_test)<-paste("EMP",num,sep='')
 ```
 
+We trained a two-class classifier on the train set with high resolution features.
 ```{r}
 # cluster the training samples into 2 classes
 set.seed(47)
@@ -294,6 +307,7 @@ vr_pca_train<-prcomp(mat_pca[-testind,],center = TRUE)$x[,1:4]
 vr_pca_test<-prcomp(mat_pca[testind,],center = TRUE)$x[,1:4]
 ```
 
+First train a classifier with pca features.
 ```{r}
 # rf with pca
 vr_train_df<-data.frame(cbind(vr_pca_train,vr_df[,-c(1,2)]))
@@ -311,7 +325,9 @@ rf_vr <- train(cluster~., data=vr_train_df, method="rf", metric=metric, tuneGrid
 rf_vr
 confusionMatrix(predict(rf_vr,vr_test_df),bigdf[testind,]$ground_truth)
 ```
+The optimal cv ROC score is 0.8889. Test accuracy is 0.3333.
 
+Next we train the second classifier with UMPCA features
 ```{r,include=FALSE}
 # create the umpca training data frame
 umpca_train_df<-data.frame(cbind(vr_df,newfea_train))[,-c(1,2)]
@@ -328,17 +344,11 @@ set.seed(seed)
 mtry <- 1:7
 tunegrid <- expand.grid(.mtry=mtry)
 rf_vr_umpca <- train(cluster~., data=umpca_train_df, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
+rf_vr_umpca
 plot(varImp(rf_vr_umpca))
 pred_umpca<-predict(rf_vr_umpca,umpca_test_df)
 confusionMatrix(pred_umpca,bigdf[testind,]$ground_truth)
 ```
+The optimal cv ROC is 0.6111 (lower than pca cv roc yet higher than the control classifier roc). Yet the test accuracy is high (0.8333).
 
-```{r}
-library(pROC)
-roc1 <- roc(pred_umpca,
-            bigdf[testind,]$ground_truth,
-            # arguments for plot
-            plot=TRUE, auc.polygon=TRUE, max.auc.polygon=TRUE, grid=TRUE,
-            print.auc=TRUE, show.thres=TRUE)
 
-```
