@@ -13,30 +13,33 @@ require(dtw)
 ```
 
 ```{r}
-folder <- "umpca/reconstruction/"
-file_list <- list.files(path = folder, pattern = "*.csv")
+file_list <- list.files(pattern = "*.csv")
 
 nsample=length(file_list)
 for (i in 1:length(file_list)){
     name<-substr(file_list[i],start=1,stop=nchar(file_list[i])-4)
-     assign(name, read.csv(paste(folder, file_list[i], sep=''),header=FALSE))
+     assign(name, read.csv(paste(file_list[i], sep=''),header=FALSE))
 }
 ```
 
 ```{r}
-image(as.matrix(hat_1),main="MPC1",asp=1)
+image(as.matrix(hat_1full),main="MPC1",asp=1)
+#contour(as.matrix(hat_1full), add = TRUE, drawlabels = FALSE)
 ```
 
 ```{r}
-image(as.matrix(hat_2),main="MPC2",asp=1)
+image(as.matrix(hat_2full),main="MPC2",asp=1)
+#contour(as.matrix(hat_2), add = TRUE, drawlabels = FALSE)
 ```
 
 ```{r}
-image(as.matrix(hat_3),main="MPC3",asp=1)
+image(as.matrix(hat_3full),main="MPC3",asp=1)
+#contour(as.matrix(hat_3), add = TRUE, drawlabels = FALSE)
 ```
 
 ```{r}
-image(as.matrix(hat_4),main="MPC4",asp=1)
+image(as.matrix(hat_4full),main="MPC4",asp=1)
+#contour(as.matrix(hat_4), add = TRUE, drawlabels = FALSE)
 ```
 
 

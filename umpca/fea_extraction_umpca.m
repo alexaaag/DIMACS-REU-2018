@@ -80,12 +80,53 @@ tHat=zeros(1520,1628,ncomp);
 
 % export the reconstructed matrix using the 4 components
 for j = 1:ncomp
-    recons=newfea_train(i,j)*proj{j}+TXmean_train;
+    recons=newfea_train(1,j)*proj{j};%+TXmean_train;
     tHat(:,:,j)=recons;
-    csvwrite(fullfile(export_dir,sprintf('%s_%d%s','hat',j,'.csv')),recons);
+    csvwrite(fullfile(export_dir,sprintf('%s_%d%s','hat',j,'.csv')),recons); % export reconstructed matrices
 end
 
 %%
 contourf(tHat(:,:,4))
+
+%% RECONSTRUCTION USING ALL SAMPLES
+T=zeros(1520,1628,20);
+T(:,:,1:14)=T_train;
+T(:,:,15:20)=T_test;
+
+N=ndims(T)-1;% Order of the tensor sample
+Is=size(T);% 1520x1628x20
+numSpl=Is(3);
+numP=4;
+[Us,TXmean,odrIdx]  = UMPCA(T,numP); % run UMPCA
+T=T-repmat(TXmean,[ones(1,N), numSpl]);%Centering
+numP=length(odrIdx);   
+
+% calculate the new features 
+newfea = zeros(numSpl,numP);
+for iP=1:numP
+    projFtr=ttv(tensor(T),Us(:,iP),[1 2]);
+    newfea(:,iP)=projFtr.data;
+end
+newfea = newfea(:,odrIdx);   
+
+ncomp=numP;
+proj=cell(ncomp,1); % store each projection component
+for i = 1:ncomp
+u1=Us{1,i};
+u2=Us{2,i};
+U=u1*transpose(u2);
+proj{i}=U;    
+end
+
+export_dir = 'reconstruction';
+tHat=zeros(1520,1628,ncomp);
+
+% export the reconstructed matrix using the 4 components
+for j = 1:ncomp
+    recons=newfea(1,j)*proj{j};%+TXmean;   % the reconstructions look very similar after adding the mean
+    tHat(:,:,j)=recons;
+    csvwrite(fullfile(export_dir,sprintf('%s_%d%s','hat',j,'full.csv')),recons);
+end
+
 end
 

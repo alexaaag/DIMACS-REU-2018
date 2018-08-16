@@ -62,7 +62,7 @@ profile_lst[[2*12+1]]<-profile_lst[[2*12+1]][which(profile_lst[[2*12+1]]>10000)]
 ### Profile Alignment and Quantifying Errors
 Now let's try a loop implementation too return all the alignments of profile 1
 ```{r}
-bigdf<-list()
+fulldf<-list()
 errordf<-list()
 for (j in seq(1,2*5+1,by=2)){
   ref1_ind<-3*12+j
@@ -128,7 +128,7 @@ for (j in seq(1,2*5+1,by=2)){
    error<-rmse/length(y)
    error_lst<-c(error_lst,error)
   }
-  bigdf<-c(bigdf,newdf)
+  fulldf<-c(fulldf,newdf)
   errordf<-c(errordf,data.frame(error_lst))
 }
 ```
@@ -136,10 +136,11 @@ for (j in seq(1,2*5+1,by=2)){
 ```{r}
 # before alignment demonstration
 ref1_ind<-3*12+1
+data_ind<-5*12+1
 xRef<-profile_lst[[ref1_ind]] # load xref (profile 20 20 )
 zRef<-profile_lst[[ref1_ind+1]] #load zref
-plot(xRef,zRef,col="orange",cex=0.2,xlab="X (um)",ylab="Z (um)",main = "Before Alignment",asp=1)
-points(profile_lst[[4*12+1]],profile_lst[[4*12+2]],cex=0.2,col="blue",asp=1)
+plot(xRef,zRef,col="orange",cex=0.2,xlab="X (um)",ylab="Z (um)",asp=1)
+points(profile_lst[[data_ind]],profile_lst[[data_ind+1]],cex=0.2,col="blue",asp=1)
 legend("topright", legend=c("reference", "data"),
        col=c("orange", "blue"), lty=1:2, cex=0.8)
 ```
@@ -147,11 +148,11 @@ legend("topright", legend=c("reference", "data"),
 ```{r}
 # after alignment
 j<-1 # which profile
-p<-7# the fourth sample
+p<-13# the sixth sample
 ndf<-(j-1)/2
 ref1_ind<-3*12+j
-myPlot<-function(index) {points(y=bigdf[[index+1]],x=bigdf[[index]],cex=0.2,col="blue")}
-plot(x=profile_lst[[ref1_ind]],y=profile_lst[[ref1_ind+1]],cex=0.2,col="orange",asp=1,,xlab="X (um)",ylab="Z (um)",main="Aligned Curves")
+myPlot<-function(index) {points(y=fulldf[[index+1]],x=fulldf[[index]],cex=0.2,col="blue")}
+plot(x=profile_lst[[ref1_ind]],y=profile_lst[[ref1_ind+1]],cex=0.2,col="orange",asp=1,,xlab="X (um)",ylab="Z (um)")
 lapply(seq(ndf*(nsample-1)*2+p,ndf*(nsample-1)*2+p,by=2),FUN=myPlot)
 legend("topright", legend=c("reference", "data"),
        col=c("orange", "blue"), lty=1:2, cex=0.8)

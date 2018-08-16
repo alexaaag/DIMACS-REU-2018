@@ -30,7 +30,23 @@ ground_truth<-as.factor(cluster)
 bigdf<-cbind(qualitydf,ground_truth)
 
 # plot the clustering result
+
+## ggplot
 ggplot(bigdf,aes(x=texture,y=profile_resid,shape=as.factor(height),color=cluster))+geom_point()+coord_flip()+theme_classic()
+
+# normal plot
+goodmeanX<-mean(bigdf[which(bigdf$ground_truth=="good"),]$profile_resid)
+badmeanX<-mean(bigdf[which(bigdf$ground_truth=="bad"),]$profile_resid)
+goodmeanY<-mean(bigdf[which(bigdf$ground_truth=="good"),]$texture)
+badmeanY<-mean(bigdf[which(bigdf$ground_truth=="bad"),]$texture)
+
+plot(
+ bigdf$profile_resid,bigdf$texture,col=as.factor(bigdf$ground_truth),ylab="Roughness (%)",xlab="Profile Residual (um^2)",xlim=c(2,16),pch=20
+)
+points(goodmeanX,goodmeanY,cex=1.5,col="red",pch=18)
+points(badmeanX,badmeanY,cex=1.5,col="black",pch=18)
+legend("topright", legend=c("Good", "Bad","Good mean","Bad mean"),pch=c(20,20,18,18),
+       col=c("red", "black","red","black"),cex=0.8)
 ```
 The clustering result shows that nGood = nBad = 10
 
@@ -120,6 +136,7 @@ mtry <- 1:7
 tunegrid <- expand.grid(.mtry=mtry)
 rf_pca <- train(ground_truth~., data=train_df, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control,preProcess = c("scale", "center"))
 rf_pca
+plot(varImp(rf_pca))
 pred_scanner<-predict(rf_pca,test_df)
 confusionMatrix(predict(rf_pca,test_df),test_df$ground_truth)
 ```
