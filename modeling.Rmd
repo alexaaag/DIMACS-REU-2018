@@ -126,7 +126,7 @@ test_df<-data.frame(cbind(scanner_pca_test,bigdf[testind,][,-c(1,2)]))
 ```{r}
 # using only scanner pca
 library(Metrics)
-
+library(caret)
 # 3-fold cv
 control<-trainControl(method="cv",number=3,summaryFunction=twoClassSummary,classProbs = TRUE)
 seed <- 47
