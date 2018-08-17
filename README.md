@@ -4,7 +4,7 @@ In this folder, you’ll find
 - quality_metrics.Rmd: R code that defines profile residual.
 - modeling.Rmd: R code of the classifiers. It includes K-means clustering, PCA and Random Forest.
 - measurements folder: all the measurement matrices
-- umpca folder: ump related matlab code and reconstruction
+- umpca folder: umpca related matlab code and reconstruction
 - qualitydf.csv: the quality df exported from quality_metrics.Rmd
 
 Within umpca:
